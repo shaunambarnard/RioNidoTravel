@@ -1780,9 +1780,13 @@ const RioNidoTravelPlanner = () => {
       e.preventDefault();
       console.log('📝 Form submitted, calling handleRedeemSubmit');
       await handleRedeemSubmit(contactInfo);
-      console.log('🎉 Setting showThankYou to true');
+      console.log('🎉 Redemption recorded, showing thank you then review');
       setShowThankYou(true);
-      // DON'T close modal - stay open for review
+      // Auto-advance to review after a short pause
+      setTimeout(() => {
+        setShowThankYou(false);
+        setShowReviewForm(true);
+      }, 1200);
     };
 
     const openReviewForm = (e) => {
