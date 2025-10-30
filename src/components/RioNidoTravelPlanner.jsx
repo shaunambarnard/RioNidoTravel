@@ -135,8 +135,9 @@ const RioNidoTravelPlanner = () => {
 
   // Helper function to create Google Maps link
   const createMapLink = (locationName, address) => {
-    const query = encodeURIComponent(`${locationName}, ${address}`);
-    return `https://www.google.com/maps/search/?api=1&query=${query}`;
+    const destination = encodeURIComponent(address || locationName);
+    // Use Google Maps directions endpoint for better mobile behavior
+    return `https://www.google.com/maps/dir/?api=1&destination=${destination}`;
   };
 
   // Helper function to create multi-stop route for entire day
@@ -1697,8 +1698,8 @@ const RioNidoTravelPlanner = () => {
       }
     });
 
-    // Filter available options by category, meal type, zone, hours, and not already used
-    const availableOptions = experiencesDatabase[dbCategory].filter(item => {
+    // Base predicate for same meal/category and not already used
+    const baseEligible = (item) => {
       // For restaurants, allow flexible swapping based on meal type
       if (dbCategory === 'restaurants') {
         const isBreakfast = activity.hasBreakfast || activity.category.includes('Breakfast') || activity.category === 'Bakery';
@@ -1711,21 +1712,37 @@ const RioNidoTravelPlanner = () => {
         if (item.category !== activity.category) return false;
       }
       
-      // Must be in a compatible zone
-      if (!compatibleZones.has(item.zone)) return false;
-      
-      // Must be open during the time slot
-      if (!isOpenDuringTimeSlot(item, activity.timeSlot)) return false;
-      
       // Must not be currently used in itinerary
       const isUsed = generatedItinerary.some(d => 
         d.activities.some(a => a.name === item.name)
       );
       return !isUsed;
+    };
+
+    // Tier 1: strict - zone compatible AND open during time slot
+    let candidates = experiencesDatabase[dbCategory].filter(item => {
+      if (!baseEligible(item)) return false;
+      if (!compatibleZones.has(item.zone)) return false;
+      if (!isOpenDuringTimeSlot(item, activity.timeSlot)) return false;
+      return true;
     });
 
-    if (availableOptions.length > 0) {
-      const replacement = availableOptions[Math.floor(Math.random() * availableOptions.length)];
+    // Tier 2: relax hours - zone compatible only
+    if (candidates.length === 0) {
+      candidates = experiencesDatabase[dbCategory].filter(item => {
+        if (!baseEligible(item)) return false;
+        if (!compatibleZones.has(item.zone)) return false;
+        return true;
+      });
+    }
+
+    // Tier 3: relax zone - any eligible in database
+    if (candidates.length === 0) {
+      candidates = experiencesDatabase[dbCategory].filter(item => baseEligible(item));
+    }
+
+    if (candidates.length > 0) {
+      const replacement = candidates[Math.floor(Math.random() * candidates.length)];
       const updatedItinerary = [...generatedItinerary];
       updatedItinerary[dayIndex].activities[activityIndex] = {
         ...replacement,
@@ -1781,6 +1798,16 @@ const RioNidoTravelPlanner = () => {
       
       console.log('📝 Submitting review...');
       
+      // Mark as redeemed (if not already) and optionally track redemption
+      if (redeemingBusiness && !redeemedBusinesses.has(redeemingBusiness.name)) {
+        setRedeemedBusinesses(new Set([...redeemedBusinesses, redeemingBusiness.name]));
+        try {
+          await trackRedemption(redeemingBusiness, contactInfo);
+        } catch (_) {
+          // Non-blocking
+        }
+      }
+
       // Send review data to Google Sheets
       await trackReview(redeemingBusiness, contactInfo);
       
@@ -1824,11 +1851,11 @@ const RioNidoTravelPlanner = () => {
     });
 
     return (
-      <div className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-        <div className="bg-gradient-to-br from-red-950 to-stone-950 border-2 border-amber-300 rounded-2xl max-w-md w-full shadow-2xl">
+      <div className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 z-50">
+        <div className="bg-gradient-to-br from-red-950 to-stone-950 border-2 border-amber-300 rounded-2xl w-[calc(100vw-1.5rem)] sm:w-full sm:max-w-md shadow-2xl">
           {!showThankYou && !showReviewForm && (
             <>
-              <div className="bg-gradient-to-br from-red-950 via-stone-950 to-red-950 p-6 rounded-t-2xl border-b-2 border-amber-300">
+              <div className="bg-gradient-to-br from-red-950 via-stone-950 to-red-950 p-4 sm:p-6 rounded-t-2xl border-b-2 border-amber-300">
                 <div className="flex items-start justify-between">
                   <div>
                     <h3 className="text-2xl font-bold text-stone-50">Redeem Your Offer</h3>
@@ -1843,7 +1870,7 @@ const RioNidoTravelPlanner = () => {
                 </div>
               </div>
 
-              <form onSubmit={handleSubmit} className="p-6 space-y-4">
+              <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4">
                 <div>
                   <label className="block text-stone-50 font-semibold mb-2">Email (Optional)</label>
                   <input
@@ -2154,9 +2181,9 @@ const RioNidoTravelPlanner = () => {
     };
 
     return (
-      <div className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-        <div className="bg-gradient-to-br from-red-950 to-stone-950 border-2 border-amber-300 rounded-2xl max-w-md w-full shadow-2xl">
-          <div className="bg-gradient-to-br from-red-950 via-stone-950 to-red-950 p-6 rounded-t-2xl border-b-2 border-amber-300">
+      <div className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 z-50">
+        <div className="bg-gradient-to-br from-red-950 to-stone-950 border-2 border-amber-300 rounded-2xl w-[calc(100vw-1.5rem)] sm:w-full sm:max-w-md shadow-2xl">
+          <div className="bg-gradient-to-br from-red-950 via-stone-950 to-red-950 p-4 sm:p-6 rounded-t-2xl border-b-2 border-amber-300">
             <div className="flex items-start justify-between">
               <div>
                 <h3 className="text-2xl font-bold text-stone-50">Send Your Itinerary</h3>
@@ -2172,7 +2199,7 @@ const RioNidoTravelPlanner = () => {
           </div>
 
           {!sent && !error ? (
-            <form onSubmit={handleSendItinerary} className="p-6 space-y-4">
+            <form onSubmit={handleSendItinerary} className="p-4 sm:p-6 space-y-4">
               <div>
                 <label className="block text-stone-50 font-semibold mb-2">Email Address</label>
                 <input
@@ -2248,9 +2275,9 @@ const RioNidoTravelPlanner = () => {
     const contact = bookingExperience.bookingContact;
 
     return (
-      <div className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-        <div className="bg-gradient-to-br from-red-950 to-stone-950 border-2 border-amber-300 rounded-2xl max-w-lg w-full shadow-2xl">
-          <div className="bg-gradient-to-br from-red-950 via-stone-950 to-red-950 p-6 rounded-t-2xl border-b-2 border-amber-300">
+      <div className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 z-50">
+        <div className="bg-gradient-to-br from-red-950 to-stone-950 border-2 border-amber-300 rounded-2xl w-[calc(100vw-1.5rem)] sm:w-full sm:max-w-lg shadow-2xl">
+          <div className="bg-gradient-to-br from-red-950 via-stone-950 to-red-950 p-4 sm:p-6 rounded-t-2xl border-b-2 border-amber-300">
             <div className="flex items-start justify-between">
               <div>
                 <h3 className="text-2xl font-bold text-stone-50">Book Your Experience</h3>
@@ -2443,8 +2470,11 @@ const RioNidoTravelPlanner = () => {
                 <h2 className="text-2xl text-stone-50 font-semibold">Featured Signature Experiences</h2>
               </div>
 
-              <div className="grid grid-cols-2 gap-4 mb-6">
-                {signatureExperiences.slice(0, 4).map(exp => (
+              <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-2 gap-4 mb-6">
+                {[...signatureExperiences]
+                  .sort((a, b) => (b.isRNLExclusive ? 1 : 0) - (a.isRNLExclusive ? 1 : 0))
+                  .slice(0, 6)
+                  .map(exp => (
                   <div
                     key={exp.id}
                     className="relative bg-black border-2 border-red-800 hover:border-stone-300 rounded-xl p-4 transition-all cursor-pointer group shadow-xl flex flex-col"
@@ -2458,7 +2488,7 @@ const RioNidoTravelPlanner = () => {
                         RNL EXCLUSIVE
                       </div>
                     )}
-                    <div className="mt-4 flex flex-col flex-1">
+                    <div className="mt-2 sm:mt-4 flex flex-col flex-1">
                       <h3 className="text-base font-bold text-stone-50 mb-1 group-hover:text-stone-200 transition-colors leading-tight">{exp.name}</h3>
                       <p className="text-stone-300 text-xs mb-2 italic">{exp.tagline}</p>
                       <div className="flex items-center justify-between text-xs mb-2">
@@ -2483,7 +2513,7 @@ const RioNidoTravelPlanner = () => {
               <div className="grid grid-cols-2 gap-4">
                 <button
                   onClick={() => openSearchModal('signature')}
-                  className="flex items-center justify-center gap-2 px-4 py-3 bg-red-900 hover:bg-red-800 text-stone-50 rounded-xl font-bold text-sm transition-all border-2 border-red-800 shadow-lg"
+                  className="flex items-center justify-center gap-2 px-4 py-3 bg-red-900 hover:bg-red-800 text-stone-50 rounded-xl font-bold text-sm transition-all border-2 border-amber-300 shadow-lg"
                 >
                   <Search className="w-4 h-4" />
                   Search Signature Experiences
@@ -2607,8 +2637,8 @@ const RioNidoTravelPlanner = () => {
                         key={`${dayIndex}-${activityIndex}`}
                         className={`border-2 rounded-xl p-6 transition-all ${
                           activity.isTrail || activity.isDistrict
-                            ? 'bg-red-950/40 border-red-800' 
-                            : 'bg-red-950/30 border-red-800 hover:border-amber-300'
+                            ? 'bg-black border-red-800'
+                            : 'bg-black border-red-800 hover:border-amber-300'
                         }`}
                       >
                         {activity.isTrail ? (
@@ -2996,9 +3026,9 @@ const RioNidoTravelPlanner = () => {
         )}
 
         {showBusinessModal && selectedBusiness && (
-          <div className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-            <div className="bg-gradient-to-br from-red-950 to-stone-950 border-2 border-amber-300 rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
-              <div className="bg-gradient-to-br from-red-950 via-stone-950 to-red-950 p-6 rounded-t-2xl border-b-2 border-amber-300">
+          <div className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 z-50">
+            <div className="bg-gradient-to-br from-red-950 to-stone-950 border-2 border-amber-300 rounded-2xl w-[calc(100vw-1.5rem)] sm:w-full sm:max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl">
+              <div className="bg-gradient-to-br from-red-950 via-stone-950 to-red-950 p-4 sm:p-6 rounded-t-2xl border-b-2 border-amber-300">
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <h3 className="text-2xl font-bold text-stone-50">{selectedBusiness.name}</h3>
@@ -3013,7 +3043,7 @@ const RioNidoTravelPlanner = () => {
                 </div>
               </div>
 
-              <div className="p-8 space-y-6">
+              <div className="p-4 sm:p-8 space-y-6">
                 <p className="text-stone-200 text-lg leading-relaxed">{selectedBusiness.description}</p>
 
                 {/* EXCLUSIVE PARTNER OFFER - LUXURIOUS REDESIGN */}
@@ -3033,31 +3063,22 @@ const RioNidoTravelPlanner = () => {
                       </div>
                     </div>
                     
-                    {/* REDEEM OR REVIEW BUTTON */}
-                    {redeemedBusinesses.has(selectedBusiness.name) ? (
-                      <button
-                        onClick={() => {
-                          setRedeemingBusiness(selectedBusiness);
-                          setShowBusinessModal(false);
-                          setSkipToReview(true);
-                          setShowRedeemModal(true);
-                        }}
-                        className="w-full bg-gradient-to-r from-amber-200 to-amber-300 hover:from-amber-300 hover:to-amber-400 text-stone-900 py-4 rounded-xl font-bold text-lg transition-all shadow-xl border-2 border-amber-400"
-                      >
-                        ⭐ Leave a Review
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => handleRedeem(selectedBusiness)}
-                        className="w-full bg-gradient-to-r from-red-800 via-red-700 to-red-800 hover:from-red-700 hover:via-red-600 hover:to-red-700 text-stone-50 py-4 rounded-xl font-bold text-lg transition-all shadow-xl border-2 border-amber-300"
-                      >
-                        🎫 Redeem Offer
-                      </button>
-                    )}
+                   {/* REDEEM BUTTON → DIRECT TO REVIEW */}
+                   <button
+                     onClick={() => {
+                       setRedeemingBusiness(selectedBusiness);
+                       setShowBusinessModal(false);
+                       setSkipToReview(true);
+                       setShowRedeemModal(true);
+                     }}
+                     className="w-full bg-gradient-to-r from-red-800 via-red-700 to-red-800 hover:from-red-700 hover:via-red-600 hover:to-red-700 text-stone-50 py-4 rounded-xl font-bold text-lg transition-all shadow-xl border-2 border-amber-300"
+                   >
+                     👉 Click to Redeem
+                   </button>
                   </div>
                 </div>
 
-                <div className="flex gap-4">
+                <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
                   <a
                     href={createMapLink(selectedBusiness.name, selectedBusiness.address || selectedBusiness.location)}
                     target="_blank"
@@ -3083,9 +3104,9 @@ const RioNidoTravelPlanner = () => {
         )}
 
         {showWineTrailModal && selectedWineTrail && (
-          <div className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-            <div className="bg-gradient-to-br from-red-950 to-stone-950 border-2 border-amber-300 rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
-              <div className="bg-gradient-to-br from-red-950 via-stone-950 to-red-950 p-6 rounded-t-2xl border-b-2 border-amber-300">
+          <div className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 z-50">
+            <div className="bg-gradient-to-br from-red-950 to-stone-950 border-2 border-amber-300 rounded-2xl w-[calc(100vw-1.5rem)] sm:w-full sm:max-w-3xl max-h-[90vh] overflow-y-auto shadow-2xl">
+              <div className="bg-gradient-to-br from-red-950 via-stone-950 to-red-950 p-4 sm:p-6 rounded-t-2xl border-b-2 border-amber-300">
                 <div className="flex items-start justify-between">
                   <div>
                     <h3 className="text-2xl font-bold text-stone-50">{selectedWineTrail.name}</h3>
@@ -3100,7 +3121,7 @@ const RioNidoTravelPlanner = () => {
                 </div>
               </div>
 
-              <div className="p-8 space-y-6">
+              <div className="p-4 sm:p-8 space-y-6">
                 <div className="bg-amber-950/30 border-2 border-amber-300 rounded-xl p-6">
                   <div className="text-amber-300 font-bold text-lg mb-2">Exclusive Perks for Rio Nido Guests:</div>
                   <p className="text-stone-200 text-lg">{selectedWineTrail.exclusivePerks}</p>
@@ -3139,9 +3160,9 @@ const RioNidoTravelPlanner = () => {
         )}
 
         {showShoppingDistrictModal && selectedShoppingDistrict && (
-          <div className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-            <div className="bg-gradient-to-br from-red-950 to-stone-950 border-2 border-amber-300 rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
-              <div className="bg-gradient-to-br from-red-950 via-stone-950 to-red-950 p-6 rounded-t-2xl border-b-2 border-amber-300">
+          <div className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 z-50">
+            <div className="bg-gradient-to-br from-red-950 to-stone-950 border-2 border-amber-300 rounded-2xl w-[calc(100vw-1.5rem)] sm:w-full sm:max-w-3xl max-h-[90vh] overflow-y-auto shadow-2xl">
+              <div className="bg-gradient-to-br from-red-950 via-stone-950 to-red-950 p-4 sm:p-6 rounded-t-2xl border-b-2 border-amber-300">
                 <div className="flex items-start justify-between">
                   <div>
                     <h3 className="text-2xl font-bold text-stone-50">{selectedShoppingDistrict.name}</h3>
@@ -3156,7 +3177,7 @@ const RioNidoTravelPlanner = () => {
                 </div>
               </div>
 
-              <div className="p-8 space-y-6">
+              <div className="p-4 sm:p-8 space-y-6">
                 <div className="bg-red-950/40 border-2 border-red-800 rounded-lg p-4">
                   <div className="text-stone-400 text-sm mb-1">Hours</div>
                   <div className="text-stone-50 font-semibold">⏰ {selectedShoppingDistrict.hours}</div>
@@ -3190,7 +3211,7 @@ const RioNidoTravelPlanner = () => {
                   </p>
                 </div>
 
-                <div className="flex gap-4">
+                <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
                   <a
                     href={createMapLink(selectedShoppingDistrict.name, selectedShoppingDistrict.address)}
                     target="_blank"
