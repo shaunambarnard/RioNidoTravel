@@ -2240,47 +2240,6 @@ const RioNidoTravelPlanner = () => {
       </div>
     );
   };
-              </div>
-
-              <div className="bg-black/40 border border-amber-300/30 rounded-lg p-4">
-                <p className="text-stone-300 text-sm">
-                  Your {preferences.duration}-day itinerary featuring {generatedItinerary.reduce((acc, day) => acc + day.activities.length, 0)} personalized recommendations will be sent to your inbox.
-                </p>
-              </div>
-
-              <button
-                type="submit"
-                className="w-full bg-gradient-to-r from-amber-200 to-amber-300 hover:from-amber-300 hover:to-amber-400 text-stone-900 py-4 rounded-xl font-bold transition-all shadow-xl border-2 border-amber-400"
-              >
-                📧 Send My Itinerary
-              </button>
-            </form>
-          ) : (
-            <div className="p-8 text-center space-y-6">
-              <div className="text-6xl mb-4">📧</div>
-              <h3 className="text-3xl font-bold text-amber-300">Check Your Inbox!</h3>
-              <p className="text-stone-200 text-lg leading-relaxed">
-                Your personalized itinerary has been sent to <span className="text-amber-300 font-semibold">{email}</span>.
-              </p>
-              <p className="text-stone-300 text-sm">
-                Don't see it? Check your spam folder.
-              </p>
-              <button
-                onClick={() => {
-                  setShowItineraryEmailModal(false);
-                  setEmail('');
-                  setSent(false);
-                }}
-                className="w-full bg-gradient-to-r from-red-800 via-red-700 to-red-800 hover:from-red-700 hover:via-red-600 hover:to-red-700 text-stone-50 py-3 rounded-xl font-bold transition-all shadow-xl border-2 border-amber-300"
-              >
-                Close
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  };
 
   // Booking Contact Modal Component
   const BookingContactModal = () => {
